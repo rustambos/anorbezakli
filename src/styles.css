@@ -136,6 +136,9 @@
 @utility bg-gold-gradient { background: var(--gradient-gold); }
 @utility shadow-soft { box-shadow: var(--shadow-soft); }
 
+.invitation-opening { min-height: max(760px, 92svh); padding: 90px 23% 180px; }
+.invitation-opening-copy { width: 100%; min-width: 0; overflow-wrap: anywhere; letter-spacing: 0; }
+.invitation-opening-copy p, .invitation-opening-copy h1 { letter-spacing: 0; }
 .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(.2,.7,.2,1); }
 .reveal.is-in { opacity: 1; transform: none; }
 @keyframes float-down { 0%,100% { transform: translateY(0); opacity: .6 } 50% { transform: translateY(8px); opacity: 1 } }

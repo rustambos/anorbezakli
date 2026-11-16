@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, KeyRound, MapPin, Music, Pause, X, ChevronLeft, ChevronRight, Globe } from "lucide-react";
+import { ChevronDown, KeyRound, MapPin, Music, Pause, LoaderCircle, X, ChevronLeft, ChevronRight, Globe } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import frame from "@/assets/frame.jpg";
 import ikat from "@/assets/ikat.jpg";
 import { LANGS, eventDate, mapQuery, tr, youtubeId, type InviteData, type Lang } from "@/lib/invite/types";
@@ -69,58 +70,122 @@ function Countdown({ target, lang }: { target: Date; lang: Lang }) {
   );
 }
 
+type YouTubePlayer = {
+  setVolume: (volume: number) => void;
+  playVideo: () => void;
+  pauseVideo: () => void;
+  destroy: () => void;
+};
+type YouTubeWindow = Window & {
+  YT?: { Player: new (element: HTMLElement, options: {
+    videoId: string;
+    playerVars: Record<string, string | number>;
+    events: {
+      onReady: (event: { target: YouTubePlayer }) => void;
+      onStateChange: (event: { data: number }) => void;
+      onError: () => void;
+      onAutoplayBlocked: () => void;
+    };
+  }) => YouTubePlayer };
+  onYouTubeIframeAPIReady?: () => void;
+};
+
 function MusicPlayer({ url, lang }: { url: string; lang: Lang }) {
   const id = youtubeId(url);
-  const player = useRef<any>(null);
+  const mount = useRef<HTMLDivElement>(null);
+  const player = useRef<YouTubePlayer | null>(null);
+  const ready = useRef(false);
+  const requested = useRef(false);
   const [playing, setPlaying] = useState(false);
-  const started = useRef(false);
+  const [waiting, setWaiting] = useState(false);
 
-  const start = () => {
-    if (!id || started.current) return;
-    started.current = true;
-    const w = window as any;
-    const create = () => {
-      player.current = new w.YT.Player("yt-hidden", {
-        videoId: id,
-        playerVars: { autoplay: 1, loop: 1, playlist: id, controls: 0 },
-        events: {
-          onReady: (e: any) => { e.target.setVolume(70); e.target.playVideo(); },
-          onStateChange: (e: any) => setPlaying(e.data === 1),
-        },
-      });
-    };
-    if (w.YT?.Player) return create();
-    w.onYouTubeIframeAPIReady = create;
-    const s = document.createElement("script");
-    s.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(s);
+  const play = () => {
+    requested.current = true;
+    setWaiting(true);
+    if (ready.current) player.current?.playVideo();
   };
 
   useEffect(() => {
-    const h = () => start();
-    document.addEventListener("pointerdown", h, { once: true });
-    return () => document.removeEventListener("pointerdown", h);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!id || !mount.current) return;
+    const w = window as YouTubeWindow;
+    let disposed = false;
+    ready.current = false;
+    requested.current = false;
+    setPlaying(false);
+    setWaiting(false);
+    const reset = () => { setWaiting(false); setPlaying(false); requested.current = false; };
+    const create = () => {
+      if (disposed || !w.YT?.Player || !mount.current || player.current) return;
+      const element = document.createElement("div");
+      mount.current.appendChild(element);
+      player.current = new w.YT.Player(element, {
+        videoId: id,
+        playerVars: { autoplay: 0, loop: 1, playlist: id, controls: 0, playsinline: 1, origin: window.location.origin },
+        events: {
+          onReady: ({ target }) => {
+            if (disposed) return;
+            ready.current = true;
+            target.setVolume(70);
+            if (requested.current) target.playVideo();
+          },
+          onStateChange: ({ data }) => {
+            if (disposed) return;
+            setPlaying(data === 1);
+            if (data === 1 || data === 2 || data === 0) setWaiting(false);
+          },
+          onError: reset,
+          onAutoplayBlocked: reset,
+        },
+      });
+    };
+    const previous = w.onYouTubeIframeAPIReady;
+    const apiReady = () => { previous?.(); create(); };
+    if (w.YT?.Player) create();
+    else {
+      w.onYouTubeIframeAPIReady = apiReady;
+      if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+        const script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        script.async = true;
+        document.head.appendChild(script);
+      }
+    }
+    const firstTouch = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest("[data-music-control]")) return;
+      if (!requested.current) play();
+      document.removeEventListener("pointerdown", firstTouch);
+    };
+    document.addEventListener("pointerdown", firstTouch);
+    return () => {
+      disposed = true;
+      document.removeEventListener("pointerdown", firstTouch);
+      if (w.onYouTubeIframeAPIReady === apiReady) {
+        if (previous) w.onYouTubeIframeAPIReady = previous;
+        else delete w.onYouTubeIframeAPIReady;
+      }
+      player.current?.destroy();
+      player.current = null;
+      ready.current = false;
+    };
   }, [id]);
 
   if (!id) return null;
   return (
     <>
-      <div className="pointer-events-none fixed -left-[9999px] h-px w-px overflow-hidden"><div id="yt-hidden" /></div>
-      <button
-        aria-label={t("music", lang)}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!started.current) return start();
-          const p = player.current;
-          if (!p?.getPlayerState) return;
-          playing ? p.pauseVideo() : p.playVideo();
+      <div ref={mount} aria-hidden="true" className="pointer-events-none fixed -left-[9999px] h-[200px] w-[200px] overflow-hidden" />
+      <Button
+        variant="ghost" size="icon" data-music-control
+        aria-label={t("music", lang)} aria-pressed={playing} aria-busy={waiting}
+        title={t("music", lang)}
+        onClick={() => {
+          if (playing) { requested.current = false; player.current?.pauseVideo(); }
+          else play();
         }}
-        className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-ink text-gold shadow-soft ring-1 ring-gold/50"
+        className="fixed bottom-5 right-5 z-40 h-12 w-12 rounded-full bg-ink text-gold shadow-soft ring-1 ring-gold/50 hover:bg-ink hover:text-gold-soft"
       >
-        {playing ? <Pause className="h-5 w-5" /> : <Music className="h-5 w-5" />}
+        {waiting ? <LoaderCircle className="h-5 w-5 animate-spin" /> : playing ? <Pause className="h-5 w-5" /> : <Music className="h-5 w-5" />}
         {playing && <span className="absolute inset-0 rounded-full border border-dashed border-gold/60 animate-spin-slow" />}
-      </button>
+      </Button>
     </>
   );
 }
@@ -176,17 +241,17 @@ export function InvitationView({ data, slug }: { data: InviteData; slug: string 
       </div>
 
       {/* Hero */}
-      <section className="relative flex min-h-[100svh] flex-col items-center justify-center px-10 py-24 text-center"
+      <section className="invitation-opening relative flex flex-col items-center justify-center text-center"
         style={{ backgroundImage: `url(${frame})`, backgroundSize: "100% 100%" }}>
-        <Reveal>
-          <div className="mb-4 text-3xl text-gold">❋</div>
-          <h1 className="font-script text-4xl leading-tight text-secondary break-words">{tr(data.greeting, lang)}</h1>
+        <Reveal className="invitation-opening-copy">
+          <div className="mb-4 text-2xl text-secondary">❋</div>
+          <h1 className="font-serif text-[28px] font-semibold leading-tight text-secondary">{tr(data.greeting, lang)}</h1>
           <Ornament />
-          <p className="text-base leading-relaxed text-foreground/80">{tr(data.welcome, lang)}</p>
-          <p className="mt-6 text-sm uppercase tracking-[0.25em] text-muted-foreground">{tr(data.title, lang)}</p>
-          <p className="mt-3 text-xl font-semibold uppercase tracking-[0.12em] text-primary break-words">{tr(data.hosts, lang)}</p>
+          <p className="text-lg font-medium leading-relaxed text-secondary">{tr(data.welcome, lang)}</p>
+          <p className="mt-6 text-base text-secondary">{tr(data.title, lang)}</p>
+          <p className="mt-3 text-xl font-semibold leading-relaxed text-primary">{tr(data.hosts, lang)}</p>
         </Reveal>
-        <a href="#date" className="absolute bottom-24 text-secondary animate-float-down" aria-label={t("scroll", lang)}>
+        <a href="#date" className="absolute bottom-[19%] text-secondary animate-float-down" aria-label={t("scroll", lang)}>
           <ChevronDown className="h-8 w-8" />
         </a>
       </section>
