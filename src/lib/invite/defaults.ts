@@ -24,7 +24,7 @@ export const DEFAULT_INVITE: InviteData = {
     { time: "22:00", label: { uz: "Marosim yakuni", ru: "Завершение вечера", en: "Farewell" } },
   ],
   photos: [{ url: g1 }, { url: g2 }],
-  musicUrl: "https://www.youtube.com/watch?v=Oa9aWdcCC4o",
+  musicUrl: "https://youtu.be/0b0vn5jcwwc",
   rsvpEnabled: true,
   maxGuests: 5,
   rsvpNote: {
