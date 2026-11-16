@@ -1,23 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
 import { inviteSchema, type InviteData } from "./types";
-
-function publicClient() {
-  const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-  return createClient<Database>(process.env["SUPABASE_URL"]!, key, {
-    auth: { persistSession: false, autoRefreshToken: false, storage: undefined },
-    global: {
-      fetch: (input, init) => {
-        const h = new Headers(init?.headers);
-        if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization");
-        h.set("apikey", key);
-        return fetch(input, { ...init, headers: h });
-      },
-    },
-  });
-}
 
 async function requireAdmin(token: string) {
   const { verifyToken } = await import("./token.server");
@@ -55,18 +39,17 @@ export const submitRsvp = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const sb = publicClient();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: inv } = await supabaseAdmin.from("invitations").select("id").eq("slug", data.slug).maybeSingle();
     if (!inv) throw new Error("Invitation not found");
-    const { error } = await sb.from("rsvps").insert({
+    const { error } = await supabaseAdmin.from("rsvps").insert({
       invitation_id: inv.id,
       guest_name: data.name,
       guests_count: data.guests,
       attending: data.attending,
       message: data.message || null,
     });
-    if (error) throw new Error(error.message);
+    if (error) { console.error(error); throw new Error("Could not save RSVP"); }
     return { ok: true };
   });
 

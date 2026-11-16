@@ -15,6 +15,13 @@
       "when": 1794825550014,
       "tag": "0001_lock_invitations_reads",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794829679482,
+      "tag": "0002_lock_rsvp_inserts",
+      "breakpoints": true
     }
   ]
 }
