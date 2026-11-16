@@ -32,7 +32,8 @@ const slugSchema = z.string().regex(/^[a-z0-9-]{3,40}$/);
 export const getInvitation = createServerFn({ method: "GET" })
   .inputValidator((d: { slug: string }) => ({ slug: slugSchema.parse(d.slug) }))
   .handler(async ({ data }) => {
-    const { data: row } = await publicClient()
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
       .from("invitations")
       .select("id, slug, data")
       .eq("slug", data.slug)
@@ -55,7 +56,8 @@ export const submitRsvp = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const sb = publicClient();
-    const { data: inv } = await sb.from("invitations").select("id").eq("slug", data.slug).maybeSingle();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: inv } = await supabaseAdmin.from("invitations").select("id").eq("slug", data.slug).maybeSingle();
     if (!inv) throw new Error("Invitation not found");
     const { error } = await sb.from("rsvps").insert({
       invitation_id: inv.id,
