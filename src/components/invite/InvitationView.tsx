@@ -159,7 +159,10 @@ function MusicPlayer({ url, lang }: { url: string; lang: Lang }) {
     return () => {
       disposed = true;
       document.removeEventListener("pointerdown", firstTouch);
-      if (w.onYouTubeIframeAPIReady === apiReady) w.onYouTubeIframeAPIReady = previous;
+      if (w.onYouTubeIframeAPIReady === apiReady) {
+        if (previous) w.onYouTubeIframeAPIReady = previous;
+        else delete w.onYouTubeIframeAPIReady;
+      }
       player.current?.destroy();
       player.current = null;
       ready.current = false;
