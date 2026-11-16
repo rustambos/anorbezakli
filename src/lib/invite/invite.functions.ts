@@ -55,18 +55,17 @@ export const submitRsvp = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const sb = publicClient();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: inv } = await supabaseAdmin.from("invitations").select("id").eq("slug", data.slug).maybeSingle();
     if (!inv) throw new Error("Invitation not found");
-    const { error } = await sb.from("rsvps").insert({
+    const { error } = await supabaseAdmin.from("rsvps").insert({
       invitation_id: inv.id,
       guest_name: data.name,
       guests_count: data.guests,
       attending: data.attending,
       message: data.message || null,
     });
-    if (error) throw new Error(error.message);
+    if (error) { console.error(error); throw new Error("Could not save RSVP"); }
     return { ok: true };
   });
 
